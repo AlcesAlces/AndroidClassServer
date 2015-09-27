@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<% include ../partials/head %>
+</head>
+<body class="container">
+
+	<header>
+		<% include ../partials/header %>
+	</header>
+
+	<main>
+		<div class="jumbotron">
+			<h1>Variable</h1>
+			<p><%= tagline %></p>
+			<h2>These are variables generated with a loop:</h2>
+			<table style="width:100%">
+				<tr>
+					<th>User</th>
+					<th>Id</th>
+				</tr>
+				
+				<% users.forEach(function(user) {%>
+						<tr>
+							<td><%= user.name %></td>
+							<td><%= user._id %></td>
+						</tr>
+					<% }); %>
+			</table>
+		</div>
+	</main>
+
+	<footer>
+		<% include ../partials/footer %>
+	</footer>
+	
+</body>
+</html>
