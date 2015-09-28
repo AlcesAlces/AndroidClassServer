@@ -251,7 +251,6 @@ io.sockets.on('connection', function (socket) {
 					if(entry.name == args.roomName)
 					{
 						uniqueName = 0;
-						break;
 					}
 				});
 				
