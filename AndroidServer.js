@@ -20,7 +20,7 @@ app.get('/', function(req,res)
 		{
 			if(err)
 			{
-				console.log('Database error');
+				console.log('Database error ' + error);
 			}
 			
 			var collection = db.collection('usersAndroid');
@@ -129,6 +129,8 @@ io.sockets.on('connection', function (socket) {
 					}
 				});
 			}
+			
+			db.close();
 		});
 	});
 	
@@ -136,9 +138,6 @@ io.sockets.on('connection', function (socket) {
 	//currently not secure.
 	socket.on('create', function(createString)
 	{
-		//var splitString = createString.split(";");
-		//var userToAdd = {name: splitString[0], password: splitString[1]};
-		
 		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
 		{
 			if(err)
@@ -202,20 +201,106 @@ io.sockets.on('connection', function (socket) {
 		}
 	});
 	
-	//Args properties: roomId
+	socket.on('get all rooms', function(args)
+	{
+		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		{
+			if(err)
+			{
+				console.log('Database error ' + error);
+				socket.emit('error', 'Database error ' + error);
+			}
+			
+			var collection = db.collection('roomsAndroid');
+			
+			collection.find().toArray(function(err, items) {
+				//TODO: Add restriction based on private/public groups
+				
+				if(err)
+				{
+					socket.emit('error', 'Connection error ' + error);
+				}
+				else
+				{
+					socket.emit('all rooms', items);
+				}
+				
+				db.close();
+			  });
+		});
+	});
+	
+	//Args are: roomName, private
+	socket.on('create room', function(args)
+	{
+		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		{
+			if(err)
+			{
+				console.log('Database error ' + error);
+			}
+			
+			var collection = db.collection('roomsAndroid');
+			
+			collection.find().toArray(function(err, items) {
+				//assert.equal(null, err);
+				//assert.equal(0, items.length);
+				var uniqueName = 1;
+				items.forEach(function(entry) {
+				
+					if(entry.name == args.roomName)
+					{
+						uniqueName = 0;
+						break;
+					}
+				});
+				
+				if(uniqueName == 1)
+				{
+					//Unique name create the room.
+					collection.insert({room : args.RoomName, creator:userName, isPrivate:args.isPrivate}, function(err,result)
+						{
+							if(err)
+							{
+								console.log(err);
+								socket.emit('error', 'Recieved error: ' + err);
+							}
+							else
+							{
+								socket.emit('room create success', 'successfully created room');
+							}
+						});
+				}
+				else
+				{
+					//Non-unique name. Emit proper exception.
+					socket.emit('error', 'Room already exists');
+				}
+				
+				db.close();
+			  });
+		});
+		
+	});
+	
+	
+	//Args properties: roomName, roomId (derived from _id in mongo)
 	socket.on('join room', function(args)
 	{
 		if(authenticated)
 		{
 			//TODO: Double check that room exists.
 			
-			//TODO: Execute room swap if neccesary.
+			//TODO: Check to see if you're approved for that room.
 			
+			//Change rooms
+			currentRoom = args.roomId;
+			_users[socket] = {room:roomId};
 			//TODO: Emit success/failure.
 		}
 		else
 		{
-			//need to re-auth.
+			//TODO: need to re-auth.
 		}
 	});
 	
