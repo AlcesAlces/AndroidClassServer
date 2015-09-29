@@ -22,23 +22,24 @@ app.get('/', function(req,res)
 			{
 				console.log('Database error ' + error);
 			}
-			
-			var collection = db.collection('usersAndroid');
-			
-			collection.find().toArray(function(err, items) {
-				//assert.equal(null, err);
-				//assert.equal(0, items.length);
+			else
+			{
+				var collection = db.collection('usersAndroid');
 				
-				var tagline = 'Example of variable binding pre-compile time code.';
-	
-				res.render('pages/index', 
-				{
-					users: items,
-					tagline: tagline
-				});
-				
-				db.close();
-			  });
+				collection.find().toArray(function(err, items) {
+					//Something something unit tests
+					//assert.equal(null, err);
+					//assert.equal(0, items.length);
+					
+					var tagline = 'Example of variable binding pre-compile time code.';
+		
+					res.render('pages/index', 
+					{
+						users: items,
+						tagline: tagline
+					});
+				  });
+			  }
 		});
 });
 
@@ -67,7 +68,7 @@ io.sockets.on('connection', function (socket) {
 	//Can use this variable to determine who is authenticated.
 	var authenticated = 0;
 	var userName = '';
-	//-1 means none
+	//-1 means no room. Otherwise use the _id on the room in the database.
 	var currentRoom = -1;
 	var lat;
 	var lon;
@@ -77,11 +78,14 @@ io.sockets.on('connection', function (socket) {
 	socket.on('authenticate', function(authString)
 	{	
 		console.log('Incomming auth request');
+		
 		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
 		{
 			if(err)
 			{
 				console.log('Database error');
+				//TODO: More description.
+				socket.emit('server error', 'Server encountered a database error encountred');
 			}
 			
 			else
@@ -95,6 +99,7 @@ io.sockets.on('connection', function (socket) {
 					if(err)
 					{
 						console.log(err);
+						socket.emit('server error', 'Server encountered a generic error');
 					}
 					
 					else if(!result)
@@ -117,6 +122,7 @@ io.sockets.on('connection', function (socket) {
 							authenticated = 1;
 							//_users keeps track of all connected users via their socket object.
 							//This way we can emit to all users in a room.
+							//TODO: Add more properties to the object.
 							_users[socket] = {room:-1};
 							return;
 						}
@@ -129,8 +135,6 @@ io.sockets.on('connection', function (socket) {
 					}
 				});
 			}
-			
-			db.close();
 		});
 	});
 	
@@ -143,6 +147,7 @@ io.sockets.on('connection', function (socket) {
 			if(err)
 			{
 				console.log('Database error');
+				socket.emit('server error', 'Server encountered a database error encountred');
 			}
 			
 			else
@@ -155,7 +160,7 @@ io.sockets.on('connection', function (socket) {
 					if(err)
 					{
 						console.log(err);
-						socket.emit('refuse', 'Refused');
+						socket.emit('refuse', 'Refused for database reason.');
 					}
 					
 					else if(!result)
@@ -175,7 +180,7 @@ io.sockets.on('connection', function (socket) {
 					}
 					else
 					{
-						socket.emit('refuse', 'Refused');
+						socket.emit('refuse', 'Refused for generic reason');
 					}
 				});
 				
@@ -208,7 +213,7 @@ io.sockets.on('connection', function (socket) {
 			if(err)
 			{
 				console.log('Database error ' + error);
-				socket.emit('error', 'Database error ' + error);
+				socket.emit('server error', 'Generic database error');
 			}
 			
 			var collection = db.collection('roomsAndroid');
@@ -218,14 +223,12 @@ io.sockets.on('connection', function (socket) {
 				
 				if(err)
 				{
-					socket.emit('error', 'Connection error ' + error);
+					socket.emit('server error', 'Connection error');
 				}
 				else
 				{
 					socket.emit('all rooms', items);
 				}
-				
-				db.close();
 			  });
 		});
 	});
@@ -262,7 +265,7 @@ io.sockets.on('connection', function (socket) {
 							if(err)
 							{
 								console.log(err);
-								socket.emit('error', 'Recieved error: ' + err);
+								socket.emit('server error', 'Error creating room.');
 							}
 							else
 							{
@@ -273,10 +276,8 @@ io.sockets.on('connection', function (socket) {
 				else
 				{
 					//Non-unique name. Emit proper exception.
-					socket.emit('error', 'Room already exists');
+					socket.emit('server error', 'Room already exists');
 				}
-				
-				db.close();
 			  });
 		});
 		
@@ -295,7 +296,8 @@ io.sockets.on('connection', function (socket) {
 			//Change rooms
 			currentRoom = args.roomId;
 			_users[socket] = {room:roomId};
-			//TODO: Emit success/failure.
+			//TODO: Emit success/failure conditions.
+			socket.emit('room join success', 'Successfully joined room');
 		}
 		else
 		{
@@ -309,6 +311,9 @@ io.sockets.on('connection', function (socket) {
 		{
 			currentRoom = -1;
 			_users[socket] = {room:-1};
+			
+			//TODO: Add leave conditions
+			socket.emit('room leave success', 'Successfully left room');
 		}
 	});
 	
