@@ -10,23 +10,43 @@
 	</header>
 
 	<main>
-		<div class="jumbotron">
-			<h1>Variable</h1>
-			<p><%= tagline %></p>
-			<h2>These are variables generated with a loop:</h2>
-			<table style="width:100%">
-				<tr>
-					<th>User</th>
-					<th>Id</th>
-				</tr>
+		
+			
+			
+			<div class="row">
+			<div class="col-sm-6">
+			
+				<div class="jumbotron">
+					<% if (userName == '') { %>
+					<h1>Welcome to Walker Talker!</h1>
+					<% } else { %>
+					<h1>Welcome to Walker Talker, <%=userName%>!
+					<% } %>
+					<p>This is going to be the main web interface for the walker talker project. This design is not final.</p>
+				</div>
 				
-				<% users.forEach(function(user) {%>
-						<tr>
-							<td><%= user.name %></td>
-							<td><%= user._id %></td>
-						</tr>
-					<% }); %>
-			</table>
+			</div>
+			<div class="col-sm-6">
+				
+				<div class="well">
+					<table style="width:100%">
+					<tr>
+						<th>Room Name</th>
+						<th>Creator</th>
+						<th>Is Private</th>
+					</tr>
+					
+					<% rooms.forEach(function(room) {%>
+							<tr>
+								<td><%= room.room %></td>
+								<td><%= room.creator %></td>
+								<td><%= room.isPrivate %></td>
+							</tr>
+						<% }); %>
+					</table>
+				</div>
+
+			</div>
 		</div>
 	</main>
 
