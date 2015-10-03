@@ -26,19 +26,13 @@ app.get('/', function(req,res)
 			{
 				console.log('Database error ' + error);
 			}
-			
-<<<<<<< HEAD
 			var collection = db.collection('roomsAndroid');
-=======
-			var collection = db.collection('usersAndroid');
->>>>>>> origin/master
 			
 			collection.find().toArray(function(err, items) {
 				//assert.equal(null, err);
 				//assert.equal(0, items.length);
 				
 				var tagline = 'Example of variable binding pre-compile time code.';
-<<<<<<< HEAD
 				
 				var usr;
 				
@@ -57,18 +51,6 @@ app.get('/', function(req,res)
 					tagline: tagline,
 					userName: usr
 				});
-				
-				//db.close();
-=======
-	
-				res.render('pages/index', 
-				{
-					users: items,
-					tagline: tagline
-				});
-				
-				db.close();
->>>>>>> origin/master
 			  });
 		});
 });
@@ -209,7 +191,6 @@ io.sockets.on('connection', function (socket) {
 	socket.on('authenticate', function(authString)
 	{	
 		console.log('Incomming auth request');
-<<<<<<< HEAD
 		
 		var doAuth = require('./AuthenticationFunctions');
 		
@@ -244,66 +225,6 @@ io.sockets.on('connection', function (socket) {
 				}
 			}
 		});
-		
-		/*
-=======
->>>>>>> origin/master
-		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
-		{
-			if(err)
-			{
-				console.log('Database error');
-			}
-			
-			else
-			{
-				console.log(authString.name +' is attempting to auth.');
-				//Should be able to swap out this mongo connection for any other kind of DB.
-				var collection = db.collection('usersAndroid');
-				
-				collection.findOne({name: authString.name}, function(err, result)
-				{
-					if(err)
-					{
-						console.log(err);
-					}
-					
-					else if(!result)
-					{
-						//User name does not exist in the database.
-						socket.emit('refuse','Your credentials have been rejected. Incorrect user name.');
-						console.log('User was rejected for bad credentials');
-					}
-					
-					//User is found in the log, do auth.
-					else
-					{
-						console.log('Found user: ' + result.name + '. Doing Auth');
-						
-						//Basic auth.
-						if(result.pass == authString.pass)
-						{
-							console.log('User ' + authString.name + ' has been authorized');
-							socket.emit('approve', 'Authentication string goes here!');
-							authenticated = 1;
-							//_users keeps track of all connected users via their socket object.
-							//This way we can emit to all users in a room.
-							_users[socket] = {room:-1};
-							return;
-						}
-						
-						else
-						{
-							console.log('User ' + authString.name + ' has been rejected for incorrect password');
-							socket.emit('refuse','Your credentials have been rejected. Incorrect password.');
-						}
-					}
-				});
-			}
-			
-			db.close();
-		});
-		*/
 	});
 	
 	//Creates a user in the database
@@ -378,12 +299,9 @@ io.sockets.on('connection', function (socket) {
 			if(err)
 			{
 				console.log('Database error ' + error);
-<<<<<<< HEAD
 				//TODO: Replace 'error'. It's reserved.
 				//socket.emit('error', 'Database error ' + error);
-=======
 				socket.emit('error', 'Database error ' + error);
->>>>>>> origin/master
 			}
 			
 			var collection = db.collection('roomsAndroid');
@@ -399,12 +317,6 @@ io.sockets.on('connection', function (socket) {
 				{
 					socket.emit('all rooms', items);
 				}
-				
-<<<<<<< HEAD
-				//db.close();
-=======
-				db.close();
->>>>>>> origin/master
 			  });
 		});
 	});
@@ -442,11 +354,9 @@ io.sockets.on('connection', function (socket) {
 							if(err)
 							{
 								console.log(err);
-<<<<<<< HEAD
 								//socket.emit('error', 'Recieved error: ' + err.toString());
-=======
+								
 								socket.emit('error', 'Recieved error: ' + err);
->>>>>>> origin/master
 							}
 							else
 							{
@@ -458,22 +368,13 @@ io.sockets.on('connection', function (socket) {
 				else
 				{
 					//Non-unique name. Emit proper exception.
-<<<<<<< HEAD
 					//TODO: Replace 'error' with something else. error seems to be reserved.
 					//socket.emit('error', 'Room already exists');
 				}
-				
-				//db.close();
-=======
 					socket.emit('error', 'Room already exists');
-				}
-				
-				db.close();
->>>>>>> origin/master
+				});
 			  });
 		});
-		
-	});
 	
 	
 	//Args properties: roomName, roomId (derived from _id in mongo)
