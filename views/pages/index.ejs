@@ -10,40 +10,13 @@
 	</header>
 
 	<main>
-			<div class="row">
-			<div class="col-sm-6">
-			
-				<div class="jumbotron">
-					<% if (userName == '') { %>
-					<h1>Welcome to Walker Talker!</h1>
-					<% } else { %>
-					<h1>Welcome to Walker Talker, <%=userName%>!
-					<% } %>
-					<p>This is going to be the main web interface for the walker talker project. This design is not final.</p>
-				</div>
-				
-			</div>
-			<div class="col-sm-6">
-				
-				<div class="well">
-					<table style="width:100%">
-					<tr>
-						<th>Room Name</th>
-						<th>Creator</th>
-						<th>Is Private</th>
-					</tr>
-					
-					<% rooms.forEach(function(room) {%>
-							<tr>
-								<td><%= room.room %></td>
-								<td><%= room.creator %></td>
-								<td><%= room.isPrivate %></td>
-							</tr>
-						<% }); %>
-					</table>
-				</div>
-
-			</div>
+		<div class="jumbotron">
+			<% if (userName == '') { %>
+			<h1>Welcome to Walker Talker!</h1>
+			<% } else { %>
+			<h1>Welcome to Walker Talker, <%=userName%>!
+			<% } %>
+			<p>This is going to be the main web interface for the walker talker project. This design is not final.</p>
 		</div>
 	</main>
 

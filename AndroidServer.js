@@ -55,6 +55,43 @@ app.get('/', function(req,res)
 		});
 });
 
+app.get('/rooms', function(req, res)
+{
+	MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		{
+			if(err)
+			{
+				console.log('Database error ' + error);
+			}
+			var collection = db.collection('roomsAndroid');
+			
+			collection.find().toArray(function(err, items) {
+				//assert.equal(null, err);
+				//assert.equal(0, items.length);
+				
+				var tagline = 'Example of variable binding pre-compile time code.';
+				
+				var usr;
+				
+				if(req.session.user)
+				{
+					usr = req.session.user;
+				}
+				else
+				{
+					usr = '';
+				}
+				
+				res.render('pages/rooms', 
+				{
+					rooms: items,
+					tagline: tagline,
+					userName: usr
+				});
+			  });
+		});
+});
+
 // index page 
 app.get('/', function(req, res) {
 	res.render('pages/index');
@@ -95,6 +132,26 @@ app.get('/login', function(req, res)
 	}
 	
 	res.render('pages/login',
+	{
+		userName : usr,
+		error : null
+	});
+});
+
+app.get('/register', function(req,res)
+{
+	var usr;
+				
+	if(req.session.user)
+	{
+		usr = req.session.user;
+	}
+	else
+	{
+		usr = '';
+	}
+	
+	res.render('pages/register',
 	{
 		userName : usr,
 		error : null
@@ -164,6 +221,85 @@ app.post('/login', function(req, res){
 				}
 			}
 		});
+});
+
+//Register post
+app.post('/register', function(req, res){
+	
+	var userToCheck = req.body.user_name.toLowerCase();
+	var passToinsert = req.body.password;
+	var emailToInsert = req.body.email;
+	
+	if(userToCheck.length == 0 || passToinsert.length == 0 || emailToInsert.length == 0)
+	{
+		res.render('pages/register',
+		{
+			userName : '',
+			error : 'You forgot to enter something...'
+		});
+	}
+	else
+	{
+		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+			{
+				if(err)
+				{
+					console.log('Database error');
+					res.render('pages/register',
+						{
+							userName : '',
+							error : 'Generic Database Error'
+						});
+				}
+				
+				else
+				{
+					console.log('Connection made with MongoDB user server');
+					var collection = db.collection('usersAndroid');
+					
+					collection.findOne({name: userToCheck}, function(err, result)
+					{
+						if(err)
+						{
+							console.log(err.message);
+							res.render('pages/register',
+							{
+								userName : '',
+								error : 'Generic Error'
+							});
+						}
+						
+						else if(!result)
+						{
+							collection.insert({name: userToCheck, pass: passToinsert, email: emailToInsert}, function(err,result)
+							{
+								if(err)
+								{
+									console.log(err);
+								}
+								else
+								{
+									console.log('Inserted new user into the database.' + userToCheck);
+									res.render('pages/login',
+									{
+										userName : '',
+										error : 'User Created Successfully'
+									});
+								}
+							});
+						}
+						else
+						{
+							res.render('pages/register',
+							{
+								userName : '',
+								error : 'Username taken.'
+							});
+						}
+					});
+				}
+			});
+	}
 });
 
 console.log('Server is listening for webpages on 3000');

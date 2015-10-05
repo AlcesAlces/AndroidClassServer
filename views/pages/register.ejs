@@ -3,7 +3,7 @@
 <head>
 	<% include ../partials/head %>
 </head>
-<form method="post" action="/login">
+<form method="post" action="/register">
 	<body class="container">
 
 		<header>
@@ -16,7 +16,10 @@
 				<input type="TEXT" name="user_name" value="" style="margin:10px;"><br>
 				<p>Password</p>
 				<input type="password" name="password" value="" style="margin:10px;"><br>
-				<input type="submit" name="login" value="Login" style="margin:10px;"><p>
+				<p>Email</p>
+				<input type="TEXT" name="email" value="" style="margin:10px;"><br>
+				<input type="submit" name="register" value="Register" style="margin:10px;"><p>
+				
 				<% if(error) { %>
 				<p> <%= error %> </p>
 				<% } %>

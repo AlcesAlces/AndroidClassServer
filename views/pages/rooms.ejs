@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<% include ../partials/head %>
+</head>
+<body class="container">
+
+	<header>
+		<% include ../partials/header %>
+	</header>
+
+	<main>
+		<div class="jumbotron">
+			
+			<h2>List of current rooms:</h2>
+			
+			<table style="width:100%">
+			<tr>
+				<th>Room Name</th>
+				<th>Creator</th>
+				<th>Is Private</th>
+			</tr>
+			
+			<% rooms.forEach(function(room) {%>
+					<tr>
+						<td><%= room.room %></td>
+						<td><%= room.creator %></td>
+						<td><%= room.isPrivate %></td>
+					</tr>
+				<% }); %>
+			</table>
+		</div>
+	</main>
+
+	<footer>
+		<% include ../partials/footer %>
+	</footer>
+	
+</body>
+</html>
