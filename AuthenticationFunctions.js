@@ -39,7 +39,7 @@ module.exports.authenticate = function(name, pass, MongoClient, fn) {
 							console.log('User ' + name + ' has been authorized');
 							//_users keeps track of all connected users via their socket object.
 							//This way we can emit to all users in a room.
-							return fn(null,{success:1});
+							return fn(null,{success:1, id:result._id});
 						}
 						
 						else

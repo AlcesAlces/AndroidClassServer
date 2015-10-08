@@ -188,7 +188,7 @@ app.post('/login', function(req, res){
 					res.render('pages/login',
 					{
 						userName : '',
-						error : 'Database Error'
+						error : 'Database Error (this is bad)'
 					});
 				}
 				else if(err.message == 'refused_name')
@@ -196,7 +196,7 @@ app.post('/login', function(req, res){
 					res.render('pages/login',
 					{
 						userName : '',
-						error : 'Incorrect Name'
+						error : 'Username does not exist'
 					});
 				}
 				else if(err.message == 'refused_password')
@@ -307,6 +307,7 @@ app.listen(3000);
 
 //_users entries will contain: room,lat,lon
 var _users = {};
+var _rooms = {};
 
 //Logic to handle all direct connections.
 io.sockets.on('connection', function (socket) {
@@ -317,6 +318,7 @@ io.sockets.on('connection', function (socket) {
 	//Can use this variable to determine who is authenticated.
 	var authenticated = 0;
 	var userName = '';
+	var userID = '';
 	//-1 means none
 	var currentRoom = -1;
 	var lat;
@@ -332,19 +334,18 @@ io.sockets.on('connection', function (socket) {
 		
 		doAuth.authenticate(authString.name, authString.pass, MongoClient, function(err,res)
 		{
-			//TODO: Finish refactoring.
 			if(err)
 			{
-				if(err == 'db_error')
+				if(err.message == 'db_error')
 				{
 					
 				}
-				else if(err == 'refused_name')
+				else if(err.message == 'refused_name')
 				{
 					//User name does not exist in the database.
 					socket.emit('refuse','Your credentials have been rejected. Incorrect user name.');
 				}
-				else if(err == 'refused_password')
+				else if(err.message == 'refused_password')
 				{
 					socket.emit('refuse','Your credentials have been rejected. Incorrect password.');
 				}
@@ -355,6 +356,8 @@ io.sockets.on('connection', function (socket) {
 				{
 					socket.emit('approve', 'Authentication string goes here!');
 					authenticated = 1;
+					userName = authString.name;
+					userID = res.id;
 					//_users keeps track of all connected users via their socket object.
 					//This way we can emit to all users in a room.
 					_users[socket] = {room:-1};
@@ -525,6 +528,17 @@ io.sockets.on('connection', function (socket) {
 			//Change rooms
 			currentRoom = args.roomId;
 			_users[socket] = {room:roomId};
+			
+			if(_rooms[args.roomId])
+			{
+				
+				_rooms[args.roomId] = [{user : userID}];
+			}
+			else
+			{
+				_rooms[args.roomId].push({user : userID});
+			}
+			
 			//TODO: Emit success/failure.
 		}
 		else
@@ -539,6 +553,14 @@ io.sockets.on('connection', function (socket) {
 		{
 			currentRoom = -1;
 			_users[socket] = {room:-1};
+			//Little algorithm to remove a user from the _rooms argument list.
+			//TODO: Algorithm below not tested.
+			for(var i = t["apples"].length; i--;){
+				if (_rooms[args.roomId][i].user == userID)
+				{ 
+					_rooms[args.roomId].splice(i, 1);
+				}
+			}
 		}
 	});
 	
@@ -546,7 +568,6 @@ io.sockets.on('connection', function (socket) {
 	{
 		if(authenticated)
 		{
-			var toEmit = {};
 			_users.forEach(function(entry) {
 				if(entry.room == currentRoom)
 				{

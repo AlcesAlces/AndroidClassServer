@@ -2,17 +2,16 @@
 	<div class="container-fluid">
 
 		<div class="navbar-header">
-			<a class="navbar-brand" href="#">Menu</a>
+			<a class="navbar-brand" href="/">Walker Talker</a>
 		</div>
 
 		<ul class="nav navbar-nav">
-			<li><a href="/">Home</a></li>
 			<li><a href="/about">About</a></li>
 			<% if(userName == '') { %>
 			<li><a href="/login">Login</a></li>
 			<li><a href="/register">Register</a></li>
 			<% } else { %>
-			<li><a href="/rooms">Rooms</a></li>
+			<li><a href="/rooms">Frequencies</a></li>
 			<li><a href="/about"><%=userName%></a></li>
 			<li><a href="/logout">Logout</a></li>
 			<% } %>
