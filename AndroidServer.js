@@ -358,6 +358,9 @@ io.sockets.on('connection', function (socket) {
 					authenticated = 1;
 					userName = authString.name;
 					userID = res.id;
+					lat = authString.lat;
+					lon = authString.lon;
+					console.log('User has authenticated at: ' + lat +','+ lon);
 					//_users keeps track of all connected users via their socket object.
 					//This way we can emit to all users in a room.
 					_users[socket] = {room:-1};
@@ -374,6 +377,7 @@ io.sockets.on('connection', function (socket) {
 		{
 			if(err)
 			{
+				socket.emit('refuse_reg', 'Refused: Database error');
 				console.log('Database error');
 			}
 			
@@ -387,7 +391,7 @@ io.sockets.on('connection', function (socket) {
 					if(err)
 					{
 						console.log(err);
-						socket.emit('refuse', 'Refused');
+						socket.emit('refuse_reg', 'Refused unspecified error');
 					}
 					
 					else if(!result)
@@ -400,14 +404,14 @@ io.sockets.on('connection', function (socket) {
 							}
 							else
 							{
-								console.log('Inserted new user into the database.' + createString.name);
+								console.log('Inserted new user into the database. ' + createString.name);
 								socket.emit('createsuccess','User created successfully');
 							}
 						});
 					}
 					else
 					{
-						socket.emit('refuse', 'Refused');
+						socket.emit('refuse_reg', 'Refused: User name exists.');
 					}
 				});
 			}
@@ -448,26 +452,63 @@ io.sockets.on('connection', function (socket) {
 			collection.find().toArray(function(err, items) {
 				//TODO: Add restriction based on private/public groups
 				
+				var itemsToReturn = [];
+				
+				items.forEach(function(entry) {
+					//Check for lat-lon distances
+					if(entry.range == -1)
+					{
+						itemsToReturn.push(entry);
+					}
+					else
+					{
+						var targetDistance = entry.range;
+						//Calculate distance to target area. Needs to be within range.
+						var distanceTo = distance(lat,lon,entry.originLat,entry.originLon,"M");
+						if(distanceTo <= targetDistance)
+						{
+							itemsToReturn.push(entry);
+						}
+					}
+				});
+				
 				if(err)
 				{
 					socket.emit('error', 'Connection error ' + error);
 				}
 				else
 				{
-					socket.emit('all rooms', items);
+					socket.emit('all rooms', itemsToReturn);
 				}
 			  });
 		});
 	});
 	
+	function distance(lat1, lon1, lat2, lon2, unit) {
+		var radlat1 = Math.PI * lat1/180
+		var radlat2 = Math.PI * lat2/180
+		var radlon1 = Math.PI * lon1/180
+		var radlon2 = Math.PI * lon2/180
+		var theta = lon1-lon2
+		var radtheta = Math.PI * theta/180
+		var dist = Math.sin(radlat1) * Math.sin(radlat2) + Math.cos(radlat1) * Math.cos(radlat2) * Math.cos(radtheta);
+		dist = Math.acos(dist)
+		dist = dist * 180/Math.PI
+		dist = dist * 60 * 1.1515
+		if (unit=="K") { dist = dist * 1.609344 }
+		if (unit=="N") { dist = dist * 0.8684 }
+		return dist
+	}
+	
 	//Args are: roomName, private
-	socket.on('create room', function(args)
+	socket.on('create_room', function(args)
 	{
 		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
 		{
 			if(err)
 			{
 				console.log('Database error ' + error);
+				socket.emit('refuse_room_create', 'Database error.');
 			}
 			
 			var collection = db.collection('roomsAndroid');
@@ -478,7 +519,7 @@ io.sockets.on('connection', function (socket) {
 				var uniqueName = 1;
 				items.forEach(function(entry) {
 				
-					if(entry.room == args.roomName)
+					if(entry.room == args._room)
 					{
 						uniqueName = 0;
 						console.log('room already exists');
@@ -488,19 +529,19 @@ io.sockets.on('connection', function (socket) {
 				if(uniqueName == 1)
 				{
 					//Unique name create the room.
-					collection.insert({room : args.roomName, creator:userName, isPrivate:args.isPrivate}, function(err,result)
+					collection.insert({creator : args._creator, room:args._room, isPrivate:args._isPrivate, range:args._range, originLat:lat, originLon:lon, permittedUsers:[{entry:userID}]}, function(err,result)
 						{
 							if(err)
 							{
 								console.log(err);
 								//socket.emit('error', 'Recieved error: ' + err.toString());
 								
-								socket.emit('error', 'Recieved error: ' + err);
+								socket.emit('refuse_room_create', 'Recieved error: ' + err);
 							}
 							else
 							{
 								console.log('creating room...');
-								socket.emit('room create success', 'successfully created room');
+								socket.emit('room_create_success', 'successfully created frequency');
 							}
 						});
 				}
@@ -510,28 +551,29 @@ io.sockets.on('connection', function (socket) {
 					//TODO: Replace 'error' with something else. error seems to be reserved.
 					//socket.emit('error', 'Room already exists');
 				}
-					socket.emit('error', 'Room already exists');
+					socket.emit('refuse_room_create', 'Room already exists');
 				});
 			  });
 		});
 	
 	
 	//Args properties: roomName, roomId (derived from _id in mongo)
-	socket.on('join room', function(args)
+	socket.on('join_room', function(args)
 	{
 		if(authenticated)
 		{
+			console.log('User ' + userName + ' attempting to join room');
 			//TODO: Double check that room exists.
 			
 			//TODO: Check to see if you're approved for that room.
 			
 			//Change rooms
 			currentRoom = args.roomId;
-			_users[socket] = {room:roomId};
+			_users[socket] = {room:args.roomId};
 			
-			if(_rooms[args.roomId])
+			if(typeof _rooms[args.roomId] === "undefined")
 			{
-				
+				console.log('room was not initialized');
 				_rooms[args.roomId] = [{user : userID}];
 			}
 			else
@@ -539,26 +581,28 @@ io.sockets.on('connection', function (socket) {
 				_rooms[args.roomId].push({user : userID});
 			}
 			
-			//TODO: Emit success/failure.
+			socket.emit('join_success', 'approved for join');
 		}
 		else
 		{
 			//TODO: need to re-auth.
+			console.log('user needs to reauth');
+			socket.emit('reauth', 'User needs to reauthenticate.');
 		}
 	});
 	
-	socket.on('leave room', function (args)
+	socket.on('leave_room', function (args)
 	{
 		if(authenticated)
 		{
 			currentRoom = -1;
 			_users[socket] = {room:-1};
 			//Little algorithm to remove a user from the _rooms argument list.
-			//TODO: Algorithm below not tested.
-			for(var i = t["apples"].length; i--;){
+			for(var i = _rooms[args.roomId].length; i--;){
 				if (_rooms[args.roomId][i].user == userID)
 				{ 
 					_rooms[args.roomId].splice(i, 1);
+					console.log('Removing user from room');
 				}
 			}
 		}
