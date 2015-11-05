@@ -1,6 +1,6 @@
 module.exports.authenticate = function(name, pass, MongoClient, fn) {
   
-  MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+  MongoClient.connect('mongodb://localhost', function(err,db)
 		{
 			if(err)
 			{

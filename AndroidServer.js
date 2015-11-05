@@ -20,7 +20,8 @@ app.use(session({
 
 app.get('/', function(req,res)
 {
-	MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+	//Old database: mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces
+	MongoClient.connect('mongodb://localhost', function(err,db)
 		{
 			if(err)
 			{
@@ -57,7 +58,7 @@ app.get('/', function(req,res)
 
 app.get('/rooms', function(req, res)
 {
-	MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+	MongoClient.connect('mongodb://localhost', function(err,db)
 		{
 			if(err)
 			{
@@ -240,7 +241,7 @@ app.post('/register', function(req, res){
 	}
 	else
 	{
-		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		MongoClient.connect('mongodb://localhost', function(err,db)
 			{
 				if(err)
 				{
@@ -323,6 +324,7 @@ io.sockets.on('connection', function (socket) {
 	var currentRoom = -1;
 	var lat;
 	var lon;
+	var debug = true;
 	
 	//Verify the user's credentials. Doesn't do much right now, just make sure that the
 	//username exists.
@@ -357,13 +359,13 @@ io.sockets.on('connection', function (socket) {
 					socket.emit('approve', 'Authentication string goes here!');
 					authenticated = 1;
 					userName = authString.name;
-					userID = res.id;
+					userID = res.id.id;
 					lat = authString.lat;
 					lon = authString.lon;
 					console.log('User has authenticated at: ' + lat +','+ lon);
 					//_users keeps track of all connected users via their socket object.
 					//This way we can emit to all users in a room.
-					_users[socket] = {room:-1};
+					_users[userID] = {room:-1, id:socket.id};
 				}
 			}
 		});
@@ -373,12 +375,13 @@ io.sockets.on('connection', function (socket) {
 	//currently not secure.
 	socket.on('create', function(createString)
 	{
-		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		//MongoClient.connect('mongodb://localhost', function(err,db)
+		MongoClient.connect('mongodb://localhost', function(err,db)
 		{
 			if(err)
 			{
 				socket.emit('refuse_reg', 'Refused: Database error');
-				console.log('Database error');
+				console.log('Database error: ' + err);
 			}
 			
 			else
@@ -418,11 +421,108 @@ io.sockets.on('connection', function (socket) {
 		});
 	});
 	
+	socket.on('reauth', function(args)
+	{
+		if(authenticated == 0 || debug)
+		{
+			
+			MongoClient.connect('mongodb://localhost', function(err,db)
+		{
+			if(err)
+			{
+				socket.emit('refuse_reg', 'Refused: Database error');
+				console.log('Database error');
+			}
+			
+			else
+			{
+				console.log('Connection made with MongoDB user server');
+				var collection = db.collection('usersAndroid');
+				
+				collection.findOne({name: args.name}, function(err, result)
+				{
+					if(err)
+					{
+						console.log(err);
+						socket.emit('refuse_reauth', 'Refused unspecified error');
+					}
+					
+					else if(!result)
+					{
+						//How did a user that didn't exist ask for reauth? Reject them.
+						socket.emit('refuse_reauth', 'Refused because you do not exist.');
+					}
+					else
+					{
+						//Found it.
+						
+						userID = result._id.id;
+						userName = args.name;
+						lat = args.lat;
+						lon = args.lon;
+						authenticated = 1;
+						_users[userID] = {room:-1, id:socket.id};
+						
+						if(args.roomId)
+						{
+							//User was in a room when they disconned.
+							currentRoom = args.roomId;
+							_users[userID] = {room:args.roomId, id:socket.id};
+							
+							if(typeof _rooms[args.roomId] === "undefined")
+							{
+								console.log('room was not initialized');
+								_rooms[args.roomId] = [{user : userID, name:userName}];
+							}
+							else
+							{
+								_rooms[args.roomId].push({user : userID, name:userName});
+							}
+						}
+						
+						socket.emit('reauth_success', 'Successfully reauthenticated');
+						console.log('User reauthed successfully');
+					}
+				});
+			}
+		});
+		}
+		else
+		{
+			//No need
+			console.log("User reauthed when they didn't need to. Weird");
+		}
+	});
+	
 	socket.on('exit', function (name)
 	{
 		if(authenticated == 1)
 		{
+			var tmpRoom = currentRoom;
 			console.log(name, ' has disconected.');
+			delete _users[userID];
+			currentRoom = -1;
+			_users[userID] = {room:-1, id:socket.id};
+			
+			if(typeof _rooms[tmpRoom] != "undefined")
+			{
+				for(var i = _rooms[tmpRoom].length; i--;){
+					if (_rooms[tmpRoom][i].user == userID)
+					{ 
+						_rooms[tmpRoom].splice(i, 1);
+						console.log('Removing user from room');
+					}
+				}
+			}
+			
+			//Emit room leave.
+			for(var key in _users)
+			{
+				if(_users[key].room == tmpRoom & io.sockets.connected[_users[key].id] != null && key != userID)
+				{
+					io.sockets.connected[_users[key].id].emit('room_users_change', _rooms[tmpRoom]);
+				}
+			}
 		}
 	});
 	
@@ -430,59 +530,125 @@ io.sockets.on('connection', function (socket) {
 	{
 		if(authenticated == 1)
 		{
+			var tmpRoom = currentRoom;
 			console.log('Removing user from the users array');
-			delete _users[socket];
+			delete _users[userID];
+			currentRoom = -1;
+			_users[userID] = {room:-1, id:socket.id};
+			
+			
+			if(typeof _rooms[tmpRoom] != "undefined")
+			{
+				for(var i = _rooms[tmpRoom].length; i--;){
+					if (_rooms[tmpRoom][i].user == userID)
+					{ 
+						_rooms[tmpRoom].splice(i, 1);
+						console.log('Removing user from room');
+					}
+				}
+			}
+			
+			//Emit room leave.
+			for(var key in _users)
+			{
+				if(_users[key].room == tmpRoom & io.sockets.connected[_users[key].id] != null && key != userID)
+				{
+					io.sockets.connected[_users[key].id].emit('room_users_change', _rooms[tmpRoom]);
+				}
+			}
 		}
 	});
 	
 	socket.on('get all rooms', function(args)
 	{
-		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		if(authenticated == 0)
 		{
-			if(err)
+			//Reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+		else
+		{
+			MongoClient.connect('mongodb://localhost', function(err,db)
 			{
-				console.log('Database error ' + error);
-				//TODO: Replace 'error'. It's reserved.
-				//socket.emit('error', 'Database error ' + error);
-				socket.emit('error', 'Database error ' + error);
-			}
-			
-			var collection = db.collection('roomsAndroid');
-			
-			collection.find().toArray(function(err, items) {
-				//TODO: Add restriction based on private/public groups
+				if(err)
+				{
+					console.log('Database error ' + error);
+					//TODO: Replace 'error'. It's reserved.
+					//socket.emit('error', 'Database error ' + error);
+					socket.emit('error', 'Database error ' + error);
+				}
 				
-				var itemsToReturn = [];
+				var collection = db.collection('roomsAndroid');
 				
-				items.forEach(function(entry) {
-					//Check for lat-lon distances
-					if(entry.range == -1)
-					{
-						itemsToReturn.push(entry);
-					}
-					else
-					{
-						var targetDistance = entry.range;
-						//Calculate distance to target area. Needs to be within range.
-						var distanceTo = distance(lat,lon,entry.originLat,entry.originLon,"M");
-						if(distanceTo <= targetDistance)
+				collection.find().toArray(function(err, items) {
+					//TODO: Add restriction based on private/public groups
+					
+					var itemsToReturn = [];
+					
+					items.forEach(function(entry) {
+						
+						entry._id = entry._id.id;
+						
+						if(typeof _rooms[entry._id] === "undefined")
+						{
+							entry.numUsers = 0;
+						}
+						else
+						{
+							entry.numUsers = _rooms[entry._id].length;
+						}
+						
+						//Check for lat-lon distances
+						if(entry.range == -1 && contains(entry.permittedUsers, userID, entry.isPrivate))
 						{
 							itemsToReturn.push(entry);
 						}
+						else
+						{
+							var targetDistance = entry.range;
+							//Calculate distance to target area. Needs to be within range.
+							var distanceTo = distance(lat,lon,entry.originLat,entry.originLon,"M");
+							if(distanceTo <= targetDistance && contains(entry.permittedUsers, userID, entry.isPrivate))
+							{
+								
+								itemsToReturn.push(entry);
+							}
+						}
+					});
+					
+					if(err)
+					{
+						socket.emit('error', 'Connection error ' + error);
 					}
-				});
-				
-				if(err)
-				{
-					socket.emit('error', 'Connection error ' + error);
-				}
-				else
-				{
-					socket.emit('all rooms', itemsToReturn);
-				}
-			  });
-		});
+					else
+					{
+						socket.emit('all rooms', itemsToReturn);
+					}
+				  });
+			});
+		}
 	});
+	
+	function contains(collection, toMatch, priv)
+	{
+		if(priv == 1)
+		{
+			var toReturn = false;
+			for( i = 0; i < collection.length; i++)
+			{
+				if(collection[i].userID == toMatch)
+				{
+					toReturn = true;
+				}
+			}
+			
+			return toReturn;
+		}
+		else
+		{
+			return true;
+		}
+	}
 	
 	function distance(lat1, lon1, lat2, lon2, unit) {
 		var radlat1 = Math.PI * lat1/180
@@ -503,57 +669,147 @@ io.sockets.on('connection', function (socket) {
 	//Args are: roomName, private
 	socket.on('create_room', function(args)
 	{
-		MongoClient.connect('mongodb://alces2:stimperman@ds045531.mongolab.com:45531/alces', function(err,db)
+		if(authenticated == 0)
 		{
-			if(err)
+			//Reauth
+			socket.emit('reauth', 'User needs to reauth');
+		}
+		else
+		{
+			MongoClient.connect('mongodb://localhost', function(err,db)
 			{
-				console.log('Database error ' + error);
-				socket.emit('refuse_room_create', 'Database error.');
-			}
-			
-			var collection = db.collection('roomsAndroid');
-			
-			collection.find().toArray(function(err, items) {
-				//assert.equal(null, err);
-				//assert.equal(0, items.length);
-				var uniqueName = 1;
-				items.forEach(function(entry) {
-				
-					if(entry.room == args._room)
-					{
-						uniqueName = 0;
-						console.log('room already exists');
-					}
-				});
-				
-				if(uniqueName == 1)
+				if(err)
 				{
-					//Unique name create the room.
-					collection.insert({creator : args._creator, room:args._room, isPrivate:args._isPrivate, range:args._range, originLat:lat, originLon:lon, permittedUsers:[{entry:userID}]}, function(err,result)
+					console.log('Database error ' + error);
+					socket.emit('refuse_room_create', 'Database error.');
+				}
+				
+				var collection = db.collection('roomsAndroid');
+				
+				collection.find().toArray(function(err, items) {
+					//assert.equal(null, err);
+					//assert.equal(0, items.length);
+					var uniqueName = 1;
+					items.forEach(function(entry) {
+					
+						if(entry.room == args._room)
 						{
-							if(err)
+							uniqueName = 0;
+							console.log('room already exists');
+						}
+					});
+					
+					if(uniqueName == 1)
+					{
+						//Unique name create the room.
+						collection.insert({creator : args._creator, room:args._room, isPrivate:args._isPrivate, range:args._range, originLat:lat, originLon:lon, permittedUsers:[{userID:userID, userName:userName}]}, function(err,result)
 							{
-								console.log(err);
-								//socket.emit('error', 'Recieved error: ' + err.toString());
-								
-								socket.emit('refuse_room_create', 'Recieved error: ' + err);
-							}
-							else
-							{
-								console.log('creating room...');
-								socket.emit('room_create_success', 'successfully created frequency');
-							}
-						});
-				}
-				else
+								if(err)
+								{
+									console.log(err);
+									//socket.emit('error', 'Recieved error: ' + err.toString());
+									
+									socket.emit('refuse_room_create', 'Recieved error: ' + err);
+								}
+								else
+								{
+									console.log('creating room...');
+									socket.emit('room_create_success', 'successfully created frequency');
+								}
+							});
+					}
+					else
+					{
+						//Non-unique name. Emit proper exception.
+						//TODO: Replace 'error' with something else. error seems to be reserved.
+						//socket.emit('error', 'Room already exists');
+					}
+						socket.emit('refuse_room_create', 'Room already exists');
+					});
+				 });				
+		}
+		});
+
+	var ObjectId = require('mongodb').ObjectID;
+	//Args are: roomName, private
+	socket.on('update_room', function(args)
+	{
+		if(authenticated == 0)
+		{
+			//Reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+		else
+		{
+			MongoClient.connect('mongodb://localhost', function(err,db)
+			{
+				if(err)
 				{
-					//Non-unique name. Emit proper exception.
-					//TODO: Replace 'error' with something else. error seems to be reserved.
-					//socket.emit('error', 'Room already exists');
+					console.log('Database error ' + error);
+					socket.emit('refuse_update_room', 'Database error.');
 				}
-					socket.emit('refuse_room_create', 'Room already exists');
-				});
-			  });
+				
+				db.collection( 'roomsAndroid' ).updateOne (
+					{_id:new ObjectId(args._id)},
+					{$set: {room:args.room,
+							isPrivate:args.isPrivate,
+							range:args.range,
+							originLat:args.originLat,
+							originLon:args.originLon,
+							permittedUsers:args.permittedUsers
+							}},
+					function( err, result ) {
+						if ( err )
+						{
+							socket.emit('refuse_update_room', 'Error updating entry');
+						}
+						else
+						{
+							socket.emit('success_update_room', 'Room was updated.');
+							console.log('Updated room.');
+						}
+					}
+				);
+				
+				  });
+			}
+		});
+		
+	socket.on('delete_room', function(args)
+	{
+		if(authenticated == 0)
+		{
+			//Reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+		else
+		{
+			MongoClient.connect('mongodb://localhost', function(err,db)
+			{
+				if(err)
+				{
+					console.log('Database error ' + error);
+					socket.emit('refuse_delete_room', 'Database error.');
+				}
+				
+				db.collection( 'roomsAndroid' ).deleteOne (
+					{_id:new ObjectId(args._id)},
+					function( err, result ) {
+						console.log(result);
+						if ( err )
+						{
+							socket.emit('refuse_delete_room', 'Error updating entry');
+						}
+						else
+						{
+							socket.emit('success_delete_room', 'Room was deleted.');
+							console.log('Deleted room.');
+						}
+					}
+				);
+				
+				  });									
+		}
 		});
 	
 	
@@ -563,25 +819,71 @@ io.sockets.on('connection', function (socket) {
 		if(authenticated)
 		{
 			console.log('User ' + userName + ' attempting to join room');
-			//TODO: Double check that room exists.
+			var canEdit = false;
 			
-			//TODO: Check to see if you're approved for that room.
-			
-			//Change rooms
-			currentRoom = args.roomId;
-			_users[socket] = {room:args.roomId};
-			
-			if(typeof _rooms[args.roomId] === "undefined")
+			MongoClient.connect('mongodb://localhost', function(err,db)
 			{
-				console.log('room was not initialized');
-				_rooms[args.roomId] = [{user : userID}];
-			}
-			else
-			{
-				_rooms[args.roomId].push({user : userID});
-			}
+				if(err)
+				{
+					socket.emit('refuse_join', 'Refused: Database error');
+					console.log('Database error');
+				}
+				
+				else
+				{
+					console.log('Connection made with MongoDB user server');
+					var collection = db.collection('roomsAndroid');
+					
+					collection.findOne({_id: new ObjectId(args.roomId)}, function(err, result)
+					{
+						console.log('DEBUG: found that room you wanted bro');
+						if(err)
+						{
+							//TODO: Handle error.
+						}
+						else if(result)
+						{
+							if(userName == result.creator)
+							{
+								canEdit = true;
+								console.log('DEBUG: you can edit this room too cool');
+							}
+							
+							//TODO: Return information about if user is authed to edit frequency.
 			
-			socket.emit('join_success', 'approved for join');
+							//TODO: Check to see if you're approved for that room.
+							
+							//Change rooms
+							currentRoom = args.roomId;
+							_users[userID] = {room:args.roomId, id:socket.id};
+							
+							if(typeof _rooms[args.roomId] === "undefined")
+							{
+								console.log('room was not initialized');
+								_rooms[args.roomId] = [{user : userID, name:userName}];
+							}
+							else
+							{
+								_rooms[args.roomId].push({user : userID, name:userName});
+							}
+							socket.emit('join_success', {perms:canEdit, msg:'approved for join'});
+							
+							//Emit room join.
+							for(var key in _users)
+							{
+								if(_users[key].room == currentRoom & io.sockets.connected[_users[key].id] != null && key != userID)
+								{
+									io.sockets.connected[_users[key].id].emit('room_users_change', _rooms[args.roomId]);
+								}
+							}
+						}
+						else
+						{
+							//TODO: Handle no room found case.
+						}
+					});
+				}
+			});
 		}
 		else
 		{
@@ -595,8 +897,9 @@ io.sockets.on('connection', function (socket) {
 	{
 		if(authenticated)
 		{
+			var tmpRoom = currentRoom;
 			currentRoom = -1;
-			_users[socket] = {room:-1};
+			_users[userID] = {room:-1, id:socket.id};
 			//Little algorithm to remove a user from the _rooms argument list.
 			for(var i = _rooms[args.roomId].length; i--;){
 				if (_rooms[args.roomId][i].user == userID)
@@ -605,20 +908,113 @@ io.sockets.on('connection', function (socket) {
 					console.log('Removing user from room');
 				}
 			}
+			
+			//Emit room leave.
+			for(var key in _users)
+			{
+				if(_users[key].room == tmpRoom & io.sockets.connected[_users[key].id] != null && key != userID)
+				{
+					io.sockets.connected[_users[key].id].emit('room_users_change', _rooms[tmpRoom]);
+				}
+			}
+		}
+		else
+		{
+			//reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
 		}
 	});
 	
-	socket.on('broadcast to room', function (args)
+	socket.on('request_all_users_room', function(args)
 	{
 		if(authenticated)
 		{
-			_users.forEach(function(entry) {
-				if(entry.room == currentRoom)
+			socket.emit('room_users_change', _rooms[currentRoom]);
+		}
+		else
+		{
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+	});
+	
+	socket.on('request_all_users', function(args)
+	{
+		if(authenticated)
+		{
+			MongoClient.connect('mongodb://localhost', function(err,db)
+			{
+				var toReturn = [];
+				
+				if(err)
 				{
-					//Perform the data burst.
-					entry.emit('broadcast', args);
+					console.log('Database error');
+					//TODO: Add return generic error.
+				}
+				else
+				{
+					console.log('Connection made with MongoDB user server');
+						var collection = db.collection('usersAndroid');
+						
+						collection.find().toArray(function(err, items) {
+						if(err)
+						{
+							console.log('oops ' + err);
+						}
+						//Build a list with all our users.
+						items.forEach(function(entry) {
+							toReturn.push({name:entry.name, user:entry._id.id});
+						});
+						//We're emitting the full list. Let the client side filter this list based on their input.
+						console.log('Emitting full user list of size: ' + toReturn.length);
+						socket.emit('request_all_users', toReturn);
+					});
 				}
 			});
+		}
+		else
+		{
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+	});
+	
+	socket.on('new_message', function (args)
+	{
+		if(authenticated)
+		{
+			for(var key in _users)
+			{
+				if(_users[key].room == currentRoom & io.sockets.connected[_users[key].id] != null)
+				{
+					io.sockets.connected[_users[key].id].emit('new_message', {message:args.message, user:args.user, id:userID});
+				}
+			}
+		}
+		else
+		{
+			//reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
+		}
+	});
+	
+	//args: 
+	socket.on('broadcast', function (args)
+	{
+		console.log('Making a broadcast');
+		if(authenticated)
+		{
+			//Javascript foreach look aw yea.
+			for(var key in _users)
+			{
+				if(_users[key].room == currentRoom & io.sockets.connected[_users[key].id] != null && key != userID)
+				{
+					io.sockets.connected[_users[key].id].emit('broadcast', {user:userName, id:userID, payload:args});
+				}
+			}
+		}
+		else
+		{
+			//reauth
+			socket.emit('reauth', 'User needs to reauthenticate');
 		}
 	});
 	
